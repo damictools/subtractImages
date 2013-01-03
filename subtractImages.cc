@@ -267,13 +267,12 @@ bool checkInputFilesCompatibility(const vector<string> &inFileList){
   return true;
 }
 
-int copyStructure(const char *inF, const char *outF, const int singleHdu){
+int copyStructure(const char *inF, const char *outF, vector<int> &singleHdu){
     
   fitsfile  *outfptr; /* FITS file pointers defined in fitsio.h */
   fitsfile *infptr;   /* FITS file pointers defined in fitsio.h */
   
   int status = 0;
-  int single = 0;
   
   int hdutype, bitpix, naxis = 0, nkeys;
   int nhdu = 0;
@@ -288,19 +287,26 @@ int copyStructure(const char *inF, const char *outF, const int singleHdu){
   
   fits_get_num_hdus(infptr, &nhdu, &status);
   
-  if (singleHdu>0){
-    if(singleHdu > nhdu){
+  
+  
+  for(unsigned int i=0;i<singleHdu.size();++i){
+    if(singleHdu[i] > nhdu){
       fits_close_file(infptr,  &status);
       cerr << red << "\nError: the file does not have the required HDU!\n\n" << normal;
       return -1000;
     }
-    single = 1; /* Copy only a single HDU if a specific extension was given */
   }
   
-  if(single)
-    fileStructSummary << "The output file will contain HDU" << singleHdu << " of " << nhdu << " availables in the input files."<< endl;
-  else
-    fileStructSummary << "The output file will contain all the " << nhdu << " HDUs availables in the input files.\n";
+  if(singleHdu.size() == 0){
+    for(int i=0;i<nhdu;++i){
+      singleHdu.push_back(i+1);
+    }
+  }
+  const unsigned int nUseHdu=singleHdu.size();
+  
+  
+  fileStructSummary << "The output file will contain " << singleHdu.size() << " of " << nhdu << " availables in the input files."<< endl;
+
     
   
   fits_create_file(&outfptr, outF, &status);/* Create the output file */
@@ -309,10 +315,9 @@ int copyStructure(const char *inF, const char *outF, const int singleHdu){
   
   fileStructSummary << bold << "HDU   hdutype  #Axis  #Cols  #Rows   IN_datatype      OUT_datatype\n" << normal;
 // HDU  hdutype #Axis #Cols #Rows datatype  
-  for (int n=1; n<=nhdu; ++n)  /* Main loop through each extension */
+  for (unsigned int eI=0; eI<nUseHdu; ++eI)  /* Main loop through each extension */
   {
-
-    if (single) n = singleHdu;
+    const unsigned int n = singleHdu[eI];
     
     /* get image dimensions and total number of pixels in image */
     fits_movabs_hdu(infptr, n, &hdutype, &status);
@@ -338,16 +343,15 @@ int copyStructure(const char *inF, const char *outF, const int singleHdu){
 
       /* copy the relevant keywords (not the structural keywords) */
       fits_get_hdrspace(infptr, &nkeys, NULL, &status); 
-//       for (int i = 1; i <= nkeys; ++i) {
-//         fits_read_record(infptr, i, card, &status);
-//         if (fits_get_keyclass(card) > TYP_CMPRS_KEY) fits_write_record(outfptr, card, &status);
-//       }
+      for (int i = 1; i <= nkeys; ++i) {
+	char card[FLEN_CARD];
+        fits_read_record(infptr, i, card, &status);
+        if (fits_get_keyclass(card) > TYP_CMPRS_KEY) fits_write_record(outfptr, card, &status);
+      }
       
     }
     fileStructSummary << endl;
     
-    /* quit if only copying a single HDU */
-    if (single) break;
   }
   fits_close_file(infptr, &status);
   fits_close_file(outfptr,  &status);
@@ -363,13 +367,15 @@ int copyStructure(const char *inF, const char *outF, const int singleHdu){
 
 /* Compute the median image and write it to an existing output file 
  * that has the right structure (created by copyStructure function */
-int computeMedianImages(const vector<string> inFileList, const char *outF, const int singleHdu, const string kMode){
+int computeMedianImages(const vector<string> inFileList, const char *outF, const vector<int> &singleHdu, const string kMode){
   
   int status = 0;
   int single = 0;
   
+  const unsigned int nUseHdu=singleHdu.size();
   int nhdu = 0;
   const int nFiles = inFileList.size();
+  
   
   /* Open the output file */
   fitsfile  *outfptr; /* FITS file pointers defined in fitsio.h */
@@ -378,9 +384,6 @@ int computeMedianImages(const vector<string> inFileList, const char *outF, const
   
   fits_get_num_hdus(outfptr, &nhdu, &status);
   
-  if (singleHdu>0){
-    single = 1; /* Copy only a single HDU if a specific extension was given */
-  }
   
   /* Open the input files */
   vector<fitsfile *> infPtrs(nFiles);
@@ -390,15 +393,16 @@ int computeMedianImages(const vector<string> inFileList, const char *outF, const
     if (status != 0) return(status);
   }
   
-  const int kReadNLines = 1;
-  const int nHDUsToProcess = (single>0)? 1 : nhdu;
-  for (int n=1; n<=nhdu; ++n)  /* Main loop through each extension */
+//   if(gVerbosity){
+//     cout << bold << "\rProcessing HDU: " << 0 << normal << flush;
+//     showProgress(0,1);
+//   }
+  
+  for (unsigned int eI=0; eI<nUseHdu; ++eI)  /* Main loop through each extension */
   {
-    int nOut = n;
-    if (single){
-      n = singleHdu;
-      nOut = 1;
-    }
+    const unsigned int n = singleHdu[eI];
+    
+    int nOut = eI+1;
     
     /* get image dimensions and total number of pixels in image */
     int hdutype, bitpix, bytepix, naxis = 0, anynul;
@@ -421,60 +425,43 @@ int computeMedianImages(const vector<string> inFileList, const char *outF, const
     char* outArray = new char[totpix*bytepix];
     
     for(int i=0;i<totpix*bytepix;++i) outArray[i] = 0;
+        
+//     if(gVerbosity){
+//       cout << bold << "\rProcessing HDU: " << n << normal << flush;
+//     }
+      
+    long firstpix[2]={1,1};
     
-    const long npixStart = naxes[0]*kReadNLines;
-    long npix = npixStart;
-    long pixelsLeft = totpix;
-    
-    if(gVerbosity){
-      cout << bold << "\rProcessing HDU: " << n << normal << flush;
-      showProgress(0,1);
+    /* Loop on the input files */
+    vector<double*> iArray;
+    for(int r=0; r<nFiles; ++r){
+      
+      iArray.push_back(new double[totpix]);
+      
+      /* Open the input file */
+      fits_movabs_hdu(infPtrs[r], n, &hdutype, &status);
+      
+      /* Read the images as doubles, regardless of actual datatype. */
+      fits_read_pix(infPtrs[r], TDOUBLE, firstpix, totpix, &nulval, iArray[r], &anynul, &status);
+      
+      if(gVerbosity){
+	showProgress(r+eI+1,nFiles+nUseHdu+1);
+      }
     }
     
-    const int nLoops = (const int)std::ceil(naxes[1]*1.0/kReadNLines);
-    for(int l=0;l<nLoops;++l){
-     
-      if(l%10 && gVerbosity){
-        if(single) showProgress(l,nLoops);
-        else       showProgress((n-1)*nLoops+l,nLoops*nHDUsToProcess);
-      }
-      
-      if(npix>pixelsLeft) npix=pixelsLeft;
-      vector< vector <double> > vLinePix(npix);
-      
-      long firstpix[2];
-      firstpix[0] = 1;
-      firstpix[1] = kReadNLines*l+1;
-      
-      /* Loop on the input files */
-      for(int r=0; r<nFiles; ++r){
-        
-        double* lArray = new double[npix];
-        
-        /* Open the input file */
-        fits_movabs_hdu(infPtrs[r], n, &hdutype, &status);
-        
-        /* Read the images as doubles, regardless of actual datatype. */
-        fits_read_pix(infPtrs[r], TDOUBLE, firstpix, npix, &nulval, lArray, &anynul, &status);
-
-        for(int c=0;c<npix;++c) vLinePix[c].push_back(lArray[c]);
-
-        delete[] lArray;
-      }
-      
-      vector<double> vResult;
-      
-      doOper( vLinePix, vResult );
-      
-      
-      if(bytepix==4){
-        for(int c=0;c<npix;++c) reinterpret_cast<float *> (outArray)[l*npixStart + c] = vResult[c];
-      }
-      else if(bytepix==8){
-        for(int c=0;c<npix;++c) reinterpret_cast<double *>(outArray)[l*npixStart + c] = vResult[c];
-      }
-      pixelsLeft-=npix;
+    
+    if(bytepix==4){
+      for(int c=0;c<totpix;++c) reinterpret_cast<float *> (outArray)[c] = iArray[0][c]-iArray[1][c];
     }
+    else if(bytepix==8){
+      for(int c=0;c<totpix;++c) reinterpret_cast<double *>(outArray)[c] = iArray[0][c]-iArray[1][c];
+    }
+    
+    for(int r=0; r<nFiles; ++r) delete[] iArray[r];
+    
+    
+//       pixelsLeft-=npix;
+//     }
     
     fits_set_bscale(outfptr, 1., 0., &status);/* Set rescale to pixel = 1*pixel_value + 0 for output file*/
     if(bytepix==4)      fits_write_img(outfptr, TFLOAT, 1, totpix, reinterpret_cast<float *>(outArray), &status);
@@ -482,7 +469,7 @@ int computeMedianImages(const vector<string> inFileList, const char *outF, const
     delete[] outArray;
     
     /* quit if only copying a single HDU */
-    if (single) break;
+//     if (single) break;
   }
   
   /* Close the input files */
@@ -514,13 +501,14 @@ void checkArch(){
   }
 }
 
-int processCommandLineArgs(const int argc, char *argv[], int &singleHdu, string &kMode, vector<string> &inFileList, string &outFile){
+int processCommandLineArgs(const int argc, char *argv[], vector<int> &singleHdu, string &kMode, vector<string> &inFileList, string &outFile){
   
   if(argc == 1) return 1;
   
   bool outFileFlag = false;
   kMode="s";
   int opt=0;
+  singleHdu.clear();
   while ( (opt = getopt(argc, argv, "mo:s:vVhH?")) != -1) {
     switch (opt) {
     case 'o':
@@ -534,13 +522,7 @@ int processCommandLineArgs(const int argc, char *argv[], int &singleHdu, string 
       }
       break;
     case 's':
-      if(singleHdu<0){
-        singleHdu = atoi(optarg);
-      }
-      else{
-        cerr << red << "\nError, can not set more than one HDU!\n\n"  << normal;
-        return 2;
-      }
+      singleHdu.push_back(atoi(optarg));
       break;
     case 'm':
       kMode = "s";
@@ -589,7 +571,7 @@ int main(int argc, char *argv[])
   
   string outFile;
   vector<string> inFileList;
-  int singleHdu=-1;
+  vector<int> singleHdu;
   string kMode;
   
   int returnCode = processCommandLineArgs( argc, argv, singleHdu, kMode, inFileList, outFile);
