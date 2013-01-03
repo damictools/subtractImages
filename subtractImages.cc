@@ -451,10 +451,18 @@ int computeMedianImages(const vector<string> inFileList, const char *outF, const
     
     
     if(bytepix==4){
-      for(int c=0;c<totpix;++c) reinterpret_cast<float *> (outArray)[c] = iArray[0][c]-iArray[1][c];
+      for(int c=0;c<totpix;++c){
+	double result = iArray[0][c]-iArray[1][c];
+	if(fabs(result)>kSatThr) result = 1e10;
+	reinterpret_cast<float *> (outArray)[c] = result;
+      }
     }
     else if(bytepix==8){
-      for(int c=0;c<totpix;++c) reinterpret_cast<double *>(outArray)[c] = iArray[0][c]-iArray[1][c];
+      for(int c=0;c<totpix;++c){
+	double result = iArray[0][c]-iArray[1][c];
+	if(fabs(result)>kSatThr) result = 1e10;
+	 reinterpret_cast<double *>(outArray)[c] = result;
+      }
     }
     
     for(int r=0; r<nFiles; ++r) delete[] iArray[r];
