@@ -127,7 +127,7 @@ void printCopyHelp(const char *exeName, bool printFullHelp=false){
   cout << "\nUsage:\n";
   cout << "  "   << exeName << " <input file 1> <input file 2> -o <output filename>\n\n";
   cout << "\nOptions:\n";
-  cout << "  -v for verbosity\n";
+  cout << "  -q for quiet (no screen output)\n";
   cout << "  -s <HDU number> for processing a single HDU\n";
   cout << normal;
   cout << blue;
@@ -517,7 +517,7 @@ int processCommandLineArgs(const int argc, char *argv[], vector<int> &singleHdu,
   kMode="s";
   int opt=0;
   singleHdu.clear();
-  while ( (opt = getopt(argc, argv, "mo:s:vVhH?")) != -1) {
+  while ( (opt = getopt(argc, argv, "mo:s:qQhH?")) != -1) {
     switch (opt) {
     case 'o':
       if(!outFileFlag){
@@ -534,9 +534,9 @@ int processCommandLineArgs(const int argc, char *argv[], vector<int> &singleHdu,
       break;
     case 'm':
       kMode = "s";
-    case 'V':
-    case 'v':
-      gVerbosity = 1;
+    case 'Q':
+    case 'q':
+      gVerbosity = 0;
       break;
     case 'h':
     case 'H':
