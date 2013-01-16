@@ -493,7 +493,7 @@ int computeMedianImages(const vector<string> inFileList, const char *outF, const
     cout << endl;
   }
   
-  cout << green << "Median file computed.\n\n" << normal;
+  cout << green << "File computed.\n\n" << normal;
   
   return(status);
 }
